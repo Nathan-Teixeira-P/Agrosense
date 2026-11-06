@@ -1,4 +1,4 @@
-# Estufa do tio Valdir
+# Agrosense
 
 Monitoramento de CO₂, umidade do solo e temperatura de uma estufa, com painel web, regras de risco e laudo gerado pela OpenAI.
 

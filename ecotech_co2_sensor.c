@@ -17,7 +17,7 @@ void analisar_co2(float matriz[][HORAS], char nomes[][TAM_NOME], int linhas, int
 
 int main(void) {
     float historico_co2[SENSORES][HORAS];
-    char nomes[SENSORES][TAM_NOME] = {"Estufa do tio Valdir"};
+    char nomes[SENSORES][TAM_NOME] = {"Agrosense"};
 
     if (!coletar_historico(historico_co2, nomes, SENSORES, HORAS)) {
         fprintf(stderr, "\nERRO: coleta incompleta, o painel nao foi gerado.\n");
