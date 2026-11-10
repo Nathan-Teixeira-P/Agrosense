@@ -58,7 +58,7 @@ Firmware em `arduino/ecotech_multi/ecotech_multi.ino`.
 |---|---|
 | BME280 (I2C) VIN / GND / SDA / SCL | 5V / GND / A4 / A5 |
 
-Calibre `TEMP_OFFSET` no início do firmware. O BME280 mede temperatura, umidade do ar e pressão (endereço `0x76` ou `0x77`; precisa da biblioteca *Adafruit BME280*). Se o módulo for na verdade um BMP280, não há umidade e o firmware não envia leituras. Cada linha serial é `temp,umidade_ar,pressao`.
+Calibre `TEMP_OFFSET` no início do firmware. O BME280 mede temperatura, umidade do ar e pressão (endereço `0x76` ou `0x77`; precisa da biblioteca *Adafruit BME280*). Se o módulo for na verdade um BMP280, não há umidade: o firmware repete `ERRO: leitura invalida...` a cada 2 s e o servidor mostra essa mensagem. Cada linha serial é `temp,umidade_ar,pressao`; valores `nan`/`inf` e a primeira linha lida (pode vir cortada) são descartados.
 
 ## API
 
@@ -77,7 +77,10 @@ Calibre `TEMP_OFFSET` no início do firmware. O BME280 mede temperatura, umidade
 |---|---|
 | Temperatura | > 32 °C |
 | Umidade do ar | > 85 % |
-| Pressão | sem alerta, só informativa |
+| Pressão | sem alerta, só informativa (o histórico avisa queda ou alta de mais de 5 hPa) |
+| Sensor travado | 12 leituras idênticas seguidas (24 s) |
+
+Os limites usam `>=`. Testes gravados antes do BME280 (com CO₂ e solo) não aparecem no histórico e são apagados do arquivo no próximo teste salvo.
 
 ## Testes
 

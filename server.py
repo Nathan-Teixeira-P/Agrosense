@@ -20,13 +20,17 @@ def carregar():
 
 def salvar(fonte, r):
     with trava:
-        h = carregar()
+        h = ia.atuais(carregar())  # descarta testes do formato antigo (CO2/solo)
         h.append({"id": int(datetime.datetime.now().timestamp() * 1000), "fonte": fonte, "resultado": r,
                   "ts": datetime.datetime.now().strftime("%d/%m %H:%M:%S")})
         os.makedirs(DADOS, exist_ok=True)
         tmp = ARQ + ".tmp"
         json.dump(h[-MAX_HIST:], open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
         os.replace(tmp, ARQ)
+
+def lidas(texto):
+    # a 1a linha pode chegar cortada (porta aberta no meio de uma linha): descartada
+    return ia.parse(texto.split("\n", 1)[1] if "\n" in texto else "")
 
 def serie(tipo, base, passo, ruido, lo, hi):
     n = AMOSTRAS
@@ -54,10 +58,11 @@ def serial(porta, prazo=300):
     try:
         for l in p.stdout:
             texto += l
-            if len(ia.parse(texto)) >= TOTAL: break
+            if l.startswith("ERRO"): raise RuntimeError("Arduino: " + l.strip() + " (sensor ausente, fiacao ou modulo BMP280 sem umidade?)")
+            if len(lidas(texto)) >= TOTAL: break
     finally:
         timer.cancel(); p.kill()
-    rows = ia.parse(texto)[:TOTAL]
+    rows = lidas(texto)[:TOTAL]
     if len(rows) < TOTAL: raise RuntimeError(f"Serial devolveu {len(rows)} de {TOTAL} leituras (tempo esgotado?)")
     return rows
 
@@ -84,12 +89,12 @@ class H(BaseHTTPRequestHandler):
             html = open(os.path.join(DIR, "index.html"), encoding="utf-8").read().replace("/dev/ttyACM0", PORTA)
             return self.responder(200, "text/html; charset=utf-8", html.encode())
         if u.path == "/api/historico":
-            h = carregar()
+            h = ia.atuais(carregar())
             itens = [{"id": e["id"], "ts": e["ts"], "fonte": e["fonte"],
                       "risco": max(s["risco"] for s in e["resultado"]["setores"])} for e in h]
             return self.json(200, {"itens": itens, "local": ia.historico_local(h), "canais": ia.CANAIS})
         if u.path.startswith("/api/historico/"):
-            for e in carregar():
+            for e in ia.atuais(carregar()):
                 if str(e["id"]) == u.path.rsplit("/", 1)[1]: return self.json(200, e["resultado"])
             return self.json(404, {"erro": "teste nao encontrado"})
         self.responder(404, "text/plain", b"nao encontrado")
@@ -107,7 +112,7 @@ class H(BaseHTTPRequestHandler):
             txt, erro = ia.chat(corpo["pergunta"], corpo.get("resumo", ""), ia.resumo_historico(carregar()))
             return self.json(200 if txt else 500, {"resposta": txt, "erro": erro})
         if u.path == "/api/historico/analise":
-            h = carregar()
+            h = ia.atuais(carregar())
             if len(h) < 2: return self.json(400, {"erro": "Preciso de pelo menos 2 testes no historico."})
             txt, erro = ia.laudo_historico(h)
             return self.json(200 if txt else 500, {"analise": txt, "erro": erro})

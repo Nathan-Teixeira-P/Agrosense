@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-import json, statistics, sys
+import json, math, statistics, sys
 from openai_client import openai
 
 INTERVALO_S = 2
-TRAVADO = 5
+TRAVADO = 12  # leituras identicas seguidas (24 s) para suspeitar de sensor travado
 NOMES = ["Agrosense"]
 CANAIS = {
-    "temp": dict(rot="Temperatura", un="°C", limite=32, sentido=1, salto=5, faixa=(-10, 60), travado=None),
-    "umi":  dict(rot="Umidade do ar", un="%", limite=85, sentido=1, salto=20, faixa=(0, 100), travado=None),
-    "pres": dict(rot="Pressao", un="hPa", limite=None, sentido=1, salto=10, faixa=(300, 1100), travado=None),  # so informativa
+    "temp": dict(rot="Temperatura", un="°C", limite=32, sentido=1, salto=5, faixa=(-10, 60)),
+    "umi":  dict(rot="Umidade do ar", un="%", limite=85, sentido=1, salto=20, faixa=(0, 100)),
+    "pres": dict(rot="Pressao", un="hPa", limite=None, sentido=1, salto=10, faixa=(300, 1100), ref=100),  # so informativa; ref = escala p/ detectar tendencia no historico
 }
 
 def canal(v, c):
@@ -45,12 +45,14 @@ def corr(x, y):
 def setor(nome, rows):
     ch = {k: canal([r[i] for r in rows], c) for i, (k, c) in enumerate(CANAIS.items())}
     temp, umi = ch["temp"], ch["umi"]
-    risco = (40 if temp["media"] > 32 else 0) \
-          + (40 if umi["media"] > 85 else 0) \
+    t_alta = temp["media"] >= CANAIS["temp"]["limite"]
+    u_alta = umi["media"] >= CANAIS["umi"]["limite"]
+    risco = (40 if t_alta else 0) \
+          + (40 if u_alta else 0) \
           + 10 * sum(bool(c["suspeito"]) for c in ch.values())
     regras = []
-    if temp["media"] > 32: regras.append("Sombrear / resfriar")
-    if umi["media"] > 85: regras.append("Reduzir umidade do ar (risco de fungos)")
+    if t_alta: regras.append("Sombrear / resfriar")
+    if u_alta: regras.append("Reduzir umidade do ar (risco de fungos)")
     for k, c in ch.items():
         if c["suspeito"]: regras.append(f"Verificar sensor de {CANAIS[k]['rot']}")
     cor = {p: corr(ch[a]["valores"], ch[b]["valores"]) for p, (a, b) in
@@ -107,20 +109,23 @@ def slope(ys):
     mx, my = (n - 1) / 2, sum(ys) / n
     return sum((i - mx) * (y - my) for i, y in enumerate(ys)) / sum((i - mx) ** 2 for i in range(n))
 
+def atuais(hist):
+    """Testes gravados antes do BME280 (com CO2/solo) misturariam sensores diferentes: ficam de fora."""
+    return [e for e in hist if all(k in e["resultado"]["setores"][0]["canais"] for k in CANAIS)]
+
 def historico_local(hist):
+    hist = atuais(hist)
     n = len(hist)
     if n == 0: return {"n": 0, "canais": {}, "risco": {"serie": []}, "insights": []}
     ss = [e["resultado"]["setores"] for e in hist]
     canais, insights = {}, []
     for k, c in CANAIS.items():
-        ss_k = [s for s in ss if k in s[0]["canais"]]  # testes antigos nao tem os canais novos
-        if not ss_k: continue
-        medias = [sum(x["canais"][k]["media"] for x in s) / len(s) for s in ss_k]
+        medias = [sum(x["canais"][k]["media"] for x in s) / len(s) for s in ss]
         alem = 0 if c["limite"] is None else sum(c["sentido"] * (m - c["limite"]) >= 0 for m in medias)
-        susp = sum(any(x["canais"][k]["suspeito"] for x in s) for s in ss_k)
+        susp = sum(any(x["canais"][k]["suspeito"] for x in s) for s in ss)
         t = slope(medias)
         canais[k] = {"medias": medias, "tendencia": t, "suspeito_em": susp}
-        if n > 1 and abs(t) * (n - 1) > 0.05 * abs(c["limite"] or 1000):
+        if n > 1 and abs(t) * (n - 1) > 0.05 * (c["limite"] or c["ref"]):
             insights.append(f"{c['rot']}: media {'subindo' if t > 0 else 'caindo'} {abs(t):.1f} {c['un']} por teste "
                             f"(de {medias[0]:.1f} para {medias[-1]:.1f}).")
         if alem: insights.append(f"{c['rot']}: media alem do limite em {alem} de {n} testes.")
@@ -133,10 +138,10 @@ def historico_local(hist):
 def resumo_historico(hist):
     h = historico_local(hist)
     linhas = []
-    for i, e in enumerate(hist, 1):
+    for i, e in enumerate(atuais(hist), 1):
         s = e["resultado"]["setores"][0]
-        med = ", ".join(f"{CANAIS[k]['rot']} {c['media']:.1f} {CANAIS[k]['un']}" for k, c in s["canais"].items() if k in CANAIS)
-        susp = [CANAIS[k]["rot"] for k, c in s["canais"].items() if k in CANAIS and c["suspeito"]]
+        med = ", ".join(f"{CANAIS[k]['rot']} {c['media']:.1f} {CANAIS[k]['un']}" for k, c in s["canais"].items())
+        susp = [CANAIS[k]["rot"] for k, c in s["canais"].items() if c["suspeito"]]
         linhas.append(f"#{i} {e['ts']} ({e['fonte']}): risco {s['risco']}/100; {med}; sensores suspeitos: {', '.join(susp) or 'nenhum'}")
     return "\n".join(linhas) + "\nPadroes calculados: " + (" ".join(h["insights"]) or "nenhum")
 
@@ -156,7 +161,8 @@ def parse(texto):
     for l in texto.splitlines():
         p = l.strip().split(",")
         try:
-            if len(p) == len(CANAIS): rows.append(tuple(float(x) for x in p))
+            r = tuple(float(x) for x in p)
+            if len(r) == len(CANAIS) and all(map(math.isfinite, r)): rows.append(r)
         except ValueError:
             pass
     return rows

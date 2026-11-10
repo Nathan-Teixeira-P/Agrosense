@@ -22,6 +22,8 @@ void loop() {
     Serial.print(temp, 1); Serial.print(',');
     Serial.print(umi, 1); Serial.print(',');
     Serial.println(pres, 1);
+  } else {
+    Serial.println("ERRO: leitura invalida do BME280 (fiacao ou modulo BMP280 sem umidade?)");
   }
   delay(INTERVALO_MS);
 }

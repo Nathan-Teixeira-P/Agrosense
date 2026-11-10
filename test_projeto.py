@@ -33,8 +33,31 @@ def test_sensor_travado_e_salto_sao_suspeitos():
     fora = ia.canal([25.0] * 23 + [90.0], ia.CANAIS["temp"])
     assert any("fora da faixa" in s for s in fora["suspeito"])
 
-def test_leitura_repetida_nao_e_suspeita():
-    for k, v in {"temp": 25.0, "umi": 60.0, "pres": 1013.0}.items(): assert ia.canal([v] * 24, ia.CANAIS[k])["suspeito"] == []
+def test_sensor_travado_e_suspeito_mas_pouca_repeticao_nao():
+    for k, v in {"temp": 25.0, "umi": 60.0, "pres": 1013.0}.items():
+        assert any("identicas" in s for s in ia.canal([v] * 24, ia.CANAIS[k])["suspeito"])
+        assert ia.canal([v] * 6 + [v + 0.1 * i for i in range(18)], ia.CANAIS[k])["suspeito"] == []
+
+def test_limite_exato_conta_como_alerta():
+    s = ia.setor("A", rows(lambda i: 31.5 + i % 2, lambda i: 60 + i % 2, lambda i: 1013 + i % 2))
+    assert s["risco"] == 40 and "Sombrear / resfriar" in s["regras"]
+
+def test_parse_rejeita_nan_e_inf():
+    assert ia.parse("nan,60,1013\n25,inf,1013\n25,60,1013\n") == [(25, 60, 1013)]
+
+def test_historico_ignora_testes_do_formato_antigo():
+    antigo = {"id": 0, "fonte": "demo", "ts": "x", "resultado": {"setores": [{"canais": {"co2": {}, "solo": {}, "temp": {}}, "risco": 10}]}}
+    novos = [entrada(i, 50 + 20 * i) for i in range(1, 4)]
+    assert ia.atuais([antigo] + novos) == novos
+    h = ia.historico_local([antigo] + novos)
+    assert h["n"] == 3 and len(h["risco"]["serie"]) == 3
+    assert "#1" in ia.resumo_historico([antigo] + novos) and "#4" not in ia.resumo_historico([antigo] + novos)
+
+def test_queda_de_pressao_no_historico_e_notada():
+    def e(i, p):
+        s = ia.setor("A", rows(lambda j: 25 + j % 2, lambda j: 60 + j % 2, lambda j: p + j % 2))
+        return {"id": i, "fonte": "demo", "ts": "x", "resultado": {"setores": [s]}}
+    assert any("Pressao" in i for i in ia.historico_local([e(i, 1013 - 4 * i) for i in range(4)])["insights"])
 
 def test_correlacao_de_serie_constante_e_omitida():
     s = ia.setor("A", rows(lambda i: 25, lambda i: 50, lambda i: 1013))
@@ -167,6 +190,27 @@ def test_run_serial_le_leituras_da_porta(server):
     st, r = post(server + "/api/run?fonte=serial&porta=" + os.ttyname(escravo), {})
     os.close(mestre); os.close(escravo)
     assert st == 200 and r["setores"][0]["canais"]["temp"]["valores"][0] == 20
+
+def test_run_serial_descarta_primeira_linha_cortada(server):
+    mestre, escravo = pty.openpty()
+    os.write(mestre, b"9.9,60,1013\n" + b"".join(f"{20 + i},60,1013\n".encode() for i in range(30)))
+    st, r = post(server + "/api/run?fonte=serial&porta=" + os.ttyname(escravo), {})
+    os.close(mestre); os.close(escravo)
+    assert st == 200 and 9.9 not in r["setores"][0]["canais"]["temp"]["valores"]
+
+def test_run_serial_mostra_erro_do_arduino(server):
+    mestre, escravo = pty.openpty()
+    os.write(mestre, b"lixo\nERRO: BME280 nao encontrado\n")
+    st, r = post(server + "/api/run?fonte=serial&porta=" + os.ttyname(escravo), {})
+    os.close(mestre); os.close(escravo)
+    assert st == 500 and "BME280 nao encontrado" in r["erro"]
+
+def test_historico_antigo_e_descartado_ao_salvar(server, historico):
+    antigo = {"id": 0, "fonte": "demo", "ts": "x", "resultado": {"setores": [{"canais": {"co2": {}}, "risco": 1}]}}
+    historico.write_text(json.dumps([antigo]))
+    assert itens(server) == []
+    post(server + "/api/run?fonte=demo", {})
+    assert [i["id"] for i in itens(server)] != [0] and len(json.loads(historico.read_text())) == 1
 
 def test_run_serial_inexistente_devolve_500(server):
     st, r = post(server + "/api/run?fonte=serial&porta=/dev/inexistente", {})
