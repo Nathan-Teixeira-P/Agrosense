@@ -5,7 +5,6 @@ from urllib.parse import parse_qs, urlparse
 import analisar_ia as ia
 
 DIR = os.path.dirname(os.path.abspath(__file__))
-BIN = os.path.join(DIR, "ecotech_sensor")
 AMOSTRAS = 24
 TOTAL = AMOSTRAS * len(ia.NOMES)
 PORTA = (sorted(glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*")) or ["/dev/ttyACM0"])[0]
@@ -40,10 +39,10 @@ def demo():
     sorteio = lambda: random.choices(["estavel", "tendencia", "travado", "ruidoso"], [40, 35, 12, 13])[0]
     linhas = []
     for _ in ia.NOMES:
-        co2 = serie(sorteio(), random.randint(500, 900), random.randint(12, 25), 25, 420, 1500)
-        solo = serie(sorteio(), random.randint(38, 60), -random.uniform(.6, 1.2), 1, 5, 90)
         temp = serie(sorteio(), random.randint(22, 30), random.uniform(.15, .35), .3, 15, 40)
-        linhas += [(round(a), round(min(max(b, 0), 100), 1), round(c)) for a, b, c in zip(co2, solo, temp)]
+        umi = serie(sorteio(), random.randint(45, 75), random.uniform(.2, .5), 1, 20, 95)
+        pres = serie(sorteio(), random.randint(1005, 1020), random.uniform(-.1, .1), .3, 990, 1030)
+        linhas += [(round(a, 1), round(min(max(b, 0), 100), 1), round(c, 1)) for a, b, c in zip(temp, umi, pres)]
     return linhas
 
 def serial(porta, prazo=300):
@@ -69,8 +68,7 @@ def rodar(fonte, porta):
         finally: trava_serial.release()
     else:
         rows = demo()
-    c = subprocess.run([BIN], input="".join(f"{int(r[0])}\n" for r in rows), capture_output=True, text=True, timeout=30)
-    r = ia.processar(rows, c.stdout.strip())
+    r = ia.processar(rows)
     salvar(fonte, r)
     return r
 
@@ -118,7 +116,6 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
 def main():
-    subprocess.run(["gcc", "-Wall", "-Wextra", "-std=c11", "-o", BIN, os.path.join(DIR, "ecotech_co2_sensor.c")], check=True)
     porta = int(os.environ.get("PORT", 3000))
     print(f"http://localhost:{porta}")
     ThreadingHTTPServer((os.environ.get("HOST", "127.0.0.1"), porta), H).serve_forever()

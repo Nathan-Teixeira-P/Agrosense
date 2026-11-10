@@ -5,54 +5,55 @@ import analisar_ia as ia
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 
-def rows(co2, solo, temp, n=24):
-    return [(co2(i), solo(i), temp(i)) for i in range(n)]
+def rows(temp, umi, pres, n=24):
+    return [(temp(i), umi(i), pres(i)) for i in range(n)]
 
 def test_parse_ignora_ruido_serial():
-    assert ia.parse("ppm,solo,temp\n800,45.5,25\nlixo\n1,2\n900,40,26\n") == [(800, 45.5, 25), (900, 40, 26)]
+    assert ia.parse("temp,umi,pres\n25.5,60,1013\nlixo\n1,2\n26,61,1012.5\n") == [(25.5, 60, 1013), (26, 61, 1012.5)]
 
 def test_setor_saudavel_tem_risco_zero():
-    s = ia.setor("A", rows(lambda i: 600 + i % 3, lambda i: 50 + (i % 2), lambda i: 25 + i % 2))
+    s = ia.setor("A", rows(lambda i: 25 + i % 2, lambda i: 60 + i % 2, lambda i: 1013 + i % 2))
     assert s["risco"] == 0 and s["regras"] == []
 
 def test_setor_critico_aciona_regras():
-    s = ia.setor("A", rows(lambda i: 1500 + i, lambda i: 10 + i % 2, lambda i: 35 + i % 2))
-    assert s["risco"] == 100
-    assert {"Ventilar / acionar exaustao", "Irrigar", "Sombrear / resfriar"} <= set(s["regras"])
+    s = ia.setor("A", rows(lambda i: 35 + i % 2, lambda i: 90 + i % 2, lambda i: 1013 + i % 2))
+    assert s["risco"] == 80
+    assert {"Sombrear / resfriar", "Reduzir umidade do ar (risco de fungos)"} <= set(s["regras"])
 
 def test_previsao_de_cruzamento_do_limite():
-    c = ia.canal([float(700 + 20 * i) for i in range(24)], ia.CANAIS["co2"])
-    assert c["tendencia"] == pytest.approx(600) and "ja alem" in c["previsao"]
-    c = ia.canal([float(500 + 5 * i) for i in range(24)], ia.CANAIS["co2"])
-    assert "cruza 1000 ppm em" in c["previsao"]
+    c = ia.canal([float(30 + 0.5 * i) for i in range(24)], ia.CANAIS["temp"])
+    assert c["tendencia"] == pytest.approx(15) and "ja alem" in c["previsao"]
+    c = ia.canal([float(20 + 0.1 * i) for i in range(24)], ia.CANAIS["temp"])
+    assert "cruza 32 °C em" in c["previsao"]
+    assert ia.canal([1013.0 + i for i in range(24)], ia.CANAIS["pres"])["previsao"] == "sem limite definido"
 
 def test_sensor_travado_e_salto_sao_suspeitos():
-    travado = ia.canal([700.0] * 24, ia.CANAIS["co2"])
-    assert any("identicas" in s for s in travado["suspeito"])
-    salto = ia.canal([600.0] * 12 + [1500.0] + [600.0] * 11, ia.CANAIS["co2"])
+    salto = ia.canal([25.0] * 12 + [45.0] + [25.0] * 11, ia.CANAIS["temp"])
     assert any("saltos" in s for s in salto["suspeito"])
+    fora = ia.canal([25.0] * 23 + [90.0], ia.CANAIS["temp"])
+    assert any("fora da faixa" in s for s in fora["suspeito"])
 
-def test_temperatura_repetida_nao_e_suspeita():
-    assert ia.canal([25.0] * 24, ia.CANAIS["temp"])["suspeito"] == []
+def test_leitura_repetida_nao_e_suspeita():
+    for k, v in {"temp": 25.0, "umi": 60.0, "pres": 1013.0}.items(): assert ia.canal([v] * 24, ia.CANAIS[k])["suspeito"] == []
 
 def test_correlacao_de_serie_constante_e_omitida():
-    s = ia.setor("A", rows(lambda i: 600, lambda i: 50, lambda i: 25))
+    s = ia.setor("A", rows(lambda i: 25, lambda i: 50, lambda i: 1013))
     assert s["correlacoes"] == {}
 
 def test_processar_rejeita_poucas_leituras():
     with pytest.raises(ValueError):
-        ia.processar([(600, 50, 25)] * 2)
+        ia.processar([(25, 60, 1013)] * 2)
 
-def entrada(id, co2, ts="01/01 00:00:00"):
-    s = ia.setor("A", rows(lambda i: co2 + i % 3, lambda i: 50 - i % 2, lambda i: 25 + i % 2))
+def entrada(id, umi, ts="01/01 00:00:00"):
+    s = ia.setor("A", rows(lambda i: 25 + i % 2, lambda i: umi + i % 3, lambda i: 1013 - i % 2))
     return {"id": id, "fonte": "demo", "ts": ts, "resultado": {"setores": [s]}}
 
-def test_historico_detecta_alta_de_co2():
-    h = ia.historico_local([entrada(i, 600 + 200 * i) for i in range(4)])
-    assert h["n"] == 4 and h["canais"]["co2"]["tendencia"] > 0
-    assert h["canais"]["co2"]["suspeito_em"] == 0
-    assert any("CO2" in i for i in h["insights"])
-    assert "#4" in ia.resumo_historico([entrada(i, 600) for i in range(4)])
+def test_historico_detecta_alta_de_umidade():
+    h = ia.historico_local([entrada(i, 40 + 15 * i) for i in range(4)])
+    assert h["n"] == 4 and h["canais"]["umi"]["tendencia"] > 0
+    assert h["canais"]["umi"]["suspeito_em"] == 0
+    assert any("Umidade do ar" in i for i in h["insights"])
+    assert "#4" in ia.resumo_historico([entrada(i, 60) for i in range(4)])
 
 def test_historico_vazio():
     assert ia.historico_local([])["n"] == 0
@@ -80,12 +81,11 @@ def openai():
 @pytest.fixture
 def historico(tmp_path):
     arq = tmp_path / "historico.json"
-    arq.write_text(json.dumps([entrada(1, 600), entrada(2, 1400)]))
+    arq.write_text(json.dumps([entrada(1, 50), entrada(2, 90)]))
     return arq
 
 @pytest.fixture
 def server(historico, openai):
-    if not shutil.which("gcc"): pytest.skip("gcc ausente")
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0)); porta = s.getsockname()[1]
     url = f"http://127.0.0.1:{porta}"
@@ -142,7 +142,7 @@ def test_run_so_aceita_post(server):
 def test_run_demo_usa_laudo_da_ia_e_grava_historico(server, openai):
     openai.conteudo = '{"resumo_geral": "tudo ok"}'
     st, r = post(server + "/api/run?fonte=demo", {})
-    assert st == 200 and r["setores"][0]["canais"]["co2"]["valores"] and r["painel"]
+    assert st == 200 and r["setores"][0]["canais"]["umi"]["valores"]
     assert r["laudo"] == {"resumo_geral": "tudo ok"} and r["erro_laudo"] is None
     assert openai.pedidos[0]["response_format"] == {"type": "json_object"}
     assert [i["id"] for i in itens(server)][:2] == [1, 2] and len(itens(server)) == 3
@@ -163,10 +163,10 @@ def test_historico_corrompido_vira_vazio(server, historico):
 
 def test_run_serial_le_leituras_da_porta(server):
     mestre, escravo = pty.openpty()
-    os.write(mestre, b"ppm,solo,temp\nlixo\n" + b"".join(f"{600 + i},50,25\n".encode() for i in range(30)))
+    os.write(mestre, b"temp,umi,pres\nlixo\n" + b"".join(f"{20 + i},60,1013\n".encode() for i in range(30)))
     st, r = post(server + "/api/run?fonte=serial&porta=" + os.ttyname(escravo), {})
     os.close(mestre); os.close(escravo)
-    assert st == 200 and r["setores"][0]["canais"]["co2"]["valores"][0] == 600
+    assert st == 200 and r["setores"][0]["canais"]["temp"]["valores"][0] == 20
 
 def test_run_serial_inexistente_devolve_500(server):
     st, r = post(server + "/api/run?fonte=serial&porta=/dev/inexistente", {})
@@ -188,5 +188,5 @@ def test_analise_historico(server, openai):
     assert post(server + "/api/historico/analise", {}) == (200, {"analise": {"resumo": "ok"}, "erro": None})
 
 def test_analise_exige_dois_testes(server, historico):
-    historico.write_text(json.dumps([entrada(1, 600)]))
+    historico.write_text(json.dumps([entrada(1, 50)]))
     assert post(server + "/api/historico/analise", {})[0] == 400

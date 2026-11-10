@@ -173,7 +173,7 @@ const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;"
 const URG = {alta: ["bad", "Precisa de atenção já"], media: ["warn", "Vale olhar hoje"], baixa: ["ok", "Sem pressa"]};
 
 function estado(c, def) {
-  const alem = def.sentido * (c.media - def.limite) >= 0;
+  const alem = def.limite != null && def.sentido * (c.media - def.limite) >= 0;
   if (alem) return ["bad", "Passou do limite"];
   if (c.suspeito.length) return ["warn", "Desconfio do sensor"];
   if (c.previsao.startsWith("ja")) return ["warn", "Acabou de passar do limite"];
@@ -183,8 +183,8 @@ function estado(c, def) {
 
 function grafico(c, def, intervalo, id) {
   const W = 360, H = 150, m = {l: 40, r: 8, t: 10, b: 20};
-  const v = c.valores, n = v.length, lim = def.limite;
-  const mx = Math.max(lim, ...v), mn = Math.min(lim, ...v), pad = (mx - mn) * .12 + 1;
+  const v = c.valores, n = v.length, lim = def.limite, tl = lim == null ? v : [lim, ...v];
+  const mx = Math.max(...tl), mn = Math.min(...tl), pad = (mx - mn) * .12 + 1;
   const hi = mx + pad, lo = mn - pad;
   const x = i => m.l + i * (W - m.l - m.r) / (n - 1);
   const y = p => m.t + (hi - p) * (H - m.t - m.b) / (hi - lo);
@@ -197,8 +197,8 @@ function grafico(c, def, intervalo, id) {
     <defs><linearGradient id="g${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--ink2)" stop-opacity=".16"/><stop offset="1" stop-color="var(--ink2)" stop-opacity="0"/></linearGradient></defs>
     ${ticks}
     <polygon points="${area}" fill="url(#g${id})"/>
-    <line x1="${m.l}" x2="${W - m.r}" y1="${y(lim)}" y2="${y(lim)}" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="5 4"/>
-    <text x="${W - m.r}" y="${y(lim) - 4}" text-anchor="end" font-size="10" font-weight="700" fill="var(--bad)">limite ${lim}</text>
+    ${lim == null ? "" : `<line x1="${m.l}" x2="${W - m.r}" y1="${y(lim)}" y2="${y(lim)}" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="${W - m.r}" y="${y(lim) - 4}" text-anchor="end" font-size="10" font-weight="700" fill="var(--bad)">limite ${lim}</text>`}
     <line x1="${x(0)}" y1="${y(b)}" x2="${x(n - 1)}" y2="${y(a * (n - 1) + b)}" stroke="var(--mut)" stroke-width="1.5" stroke-dasharray="2 4"/>
     <polyline points="${linha}" fill="none" stroke="var(--ink2)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     <circle cx="${x(n - 1)}" cy="${y(v[n - 1])}" r="4.5" fill="var(--ink2)" stroke="var(--card)" stroke-width="2"/>
@@ -239,7 +239,7 @@ function render(r) {
         ${(L?.insights || []).length ? `<h2 style="margin-top:14px">O que percebi cruzando os dados</h2><ul>${L.insights.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
       </section>
     </div>
-    <div class="grid g3 sec">${Object.entries(r.canais).map(([k, def]) => canalCard(k, def, s.canais[k], r.intervalo_s, si + k)).join("")}</div>
+    <div class="grid g3 sec">${Object.entries(r.canais).filter(([k]) => s.canais[k]).map(([k, def]) => canalCard(k, def, s.canais[k], r.intervalo_s, si + k)).join("")}</div>
     <div class="grid g2 sec">
       <section class="card"><h2>O que a regra manda</h2>
         ${s.regras.map(x => `<div class="act"><span class="dot" aria-hidden="true"></span><span>${esc(x)}</span></div>`).join("") || `<div class="act"><span class="dot ok" aria-hidden="true"></span><span>Nada a fazer por enquanto.</span></div>`}
@@ -253,12 +253,11 @@ function render(r) {
 
   $("out").innerHTML = blocos + `
     <section class="card sec"><h2>Ficou com dúvida? Pergunte</h2>
-      <div class="sug">${["Preciso irrigar agora?", "Tem algum sensor com defeito?", "Por onde eu começo?"].map(q => `<button type="button" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+      <div class="sug">${["A umidade do ar está boa?", "Tem algum sensor com defeito?", "Por onde eu começo?"].map(q => `<button type="button" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
       <div id="chatlog" aria-live="polite"></div>
       <form class="chatbar" id="chatform"><input id="pergunta" placeholder="Escreva do seu jeito…" aria-label="Pergunta"><button>Perguntar</button></form>
     </section>
-    <details><summary>Ver as contas que fiz antes de responder</summary><pre>${esc(r.resumo)}</pre></details>
-    <details><summary>Ver o painel de CO₂ (programa em C)</summary><pre>${esc(r.painel)}</pre></details>`;
+    <details><summary>Ver as contas que fiz antes de responder</summary><pre>${esc(r.resumo)}</pre></details>`;
 
   const ask = async q => {
     const log = $("chatlog");
@@ -298,7 +297,7 @@ async function carregarHistorico() {
     const rc = e.risco >= 50 ? "bad" : e.risco >= 20 ? "warn" : "ok";
     return `<button class="hi ${e.id === idAtivo ? "on" : ""}" data-id="${e.id}"><span>${esc(e.ts)} <small>· ${e.fonte === "serial" ? "sensor real" : "exemplo"}</small></span><span class="pill ${rc}">${e.risco}/100</span></button>`;
   }).join("");
-  const charts = Object.entries(d.canais).map(([k, def]) => {
+  const charts = Object.entries(d.canais).filter(([k]) => L.canais[k]).map(([k, def]) => {
     const c = L.canais[k], t = c.tendencia;
     return `<section class="card"><h2>${esc(def.rot)} · média por teste</h2>${mini(c.medias, def.limite, def.un, "var(--ink2)")}
       <p class="trend">${L.n > 1 ? (t >= 0 ? "▲ +" : "▼ ") + t.toFixed(1) + " " + esc(def.un) + " por teste" : "falta mais um teste pra comparar"}${c.suspeito_em ? ` · desconfiei do sensor em ${c.suspeito_em} de ${L.n}` : ""}</p></section>`;

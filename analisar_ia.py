@@ -6,9 +6,9 @@ INTERVALO_S = 2
 TRAVADO = 5
 NOMES = ["Agrosense"]
 CANAIS = {
-    "co2":  dict(rot="CO2", un="ppm", limite=1000, sentido=1, salto=400, faixa=(200, 10000)),
-    "solo": dict(rot="Umidade do solo", un="%", limite=30, sentido=-1, salto=25, faixa=(0, 100)),
     "temp": dict(rot="Temperatura", un="°C", limite=32, sentido=1, salto=5, faixa=(-10, 60), travado=None),
+    "umi":  dict(rot="Umidade do ar", un="%", limite=85, sentido=1, salto=20, faixa=(0, 100), travado=None),
+    "pres": dict(rot="Pressao", un="hPa", limite=None, sentido=1, salto=10, faixa=(300, 1100), travado=None),  # so informativa
 }
 
 def canal(v, c):
@@ -17,7 +17,9 @@ def canal(v, c):
     a = slope(v)
     b = my - a * mx
     lim, s = c["limite"], c["sentido"]
-    if v[-1] * s >= lim * s:
+    if lim is None:
+        prev = "sem limite definido"
+    elif v[-1] * s >= lim * s:
         prev = f"ja alem do limite ({lim} {c['un']})"
     elif a * s > 0:
         prev = f"cruza {lim} {c['un']} em ~{(lim - (a * (n - 1) + b)) / a * INTERVALO_S / 60:.1f} min"
@@ -42,20 +44,17 @@ def corr(x, y):
 
 def setor(nome, rows):
     ch = {k: canal([r[i] for r in rows], c) for i, (k, c) in enumerate(CANAIS.items())}
-    co2, solo, temp = ch["co2"], ch["solo"], ch["temp"]
-    risco = (40 if co2["media"] >= 1300 else 20 if co2["media"] >= 1000 else 0) \
-          + (40 if solo["media"] < 20 else 30 if solo["media"] < 30 else 0) \
-          + (25 if temp["media"] > 32 else 0) \
+    temp, umi = ch["temp"], ch["umi"]
+    risco = (40 if temp["media"] > 32 else 0) \
+          + (40 if umi["media"] > 85 else 0) \
           + 10 * sum(bool(c["suspeito"]) for c in ch.values())
     regras = []
-    if co2["media"] >= 1000: regras.append("Ventilar / acionar exaustao")
-    if solo["media"] < 30: regras.append("Irrigar")
-    elif solo["tendencia"] < 0 and "cruza" in solo["previsao"]: regras.append("Programar irrigacao: solo secando")
     if temp["media"] > 32: regras.append("Sombrear / resfriar")
+    if umi["media"] > 85: regras.append("Reduzir umidade do ar (risco de fungos)")
     for k, c in ch.items():
         if c["suspeito"]: regras.append(f"Verificar sensor de {CANAIS[k]['rot']}")
     cor = {p: corr(ch[a]["valores"], ch[b]["valores"]) for p, (a, b) in
-           {"CO2 x temperatura": ("co2", "temp"), "CO2 x solo": ("co2", "solo"), "temperatura x solo": ("temp", "solo")}.items()}
+           {"temperatura x umidade do ar": ("temp", "umi"), "temperatura x pressao": ("temp", "pres"), "umidade do ar x pressao": ("umi", "pres")}.items()}
     return {"nome": nome, "canais": ch, "risco": min(risco, 100), "regras": regras,
             "correlacoes": {k: round(v, 2) for k, v in cor.items() if v is not None}}
 
@@ -72,17 +71,18 @@ def resumo_texto(setores):
         linhas.append("  - acoes por regra: " + ("; ".join(s["regras"]) or "nenhuma"))
     return "\n".join(linhas)
 
-SISTEMA = ("Voce e um agronomo assistente de uma estufa. Os dados vem de sensores baratos: CO2 (MH-Z19B), "
-           "umidade do solo (capacitivo) e temperatura (interna do MH-Z19B, erro de alguns graus). "
-           "Limites: CO2 > 1000 ppm alerta, media > 1300 critica; solo < 30% seco; temperatura > 32 C estresse termico. "
+SISTEMA = ("Voce e um agronomo assistente de uma estufa. Os dados vem de um unico sensor barato, o BME280: "
+           "temperatura, umidade do ar e pressao. Nao ha sensor de CO2 nem de umidade do solo: nao opine sobre irrigacao ou CO2. "
+           "Limites: temperatura > 32 C estresse termico; "
+           "umidade do ar > 85% risco de fungos; pressao sem limite (so contexto: queda rapida indica mau tempo). "
            "Considere a previsao e a saude dos sensores: leitura de sensor SUSPEITO nao e confiavel. Portugues, direto.")
 
-def laudo(resumo, painel):
+def laudo(resumo):
     txt, erro = openai([
         {"role": "system", "content": SISTEMA + ' Responda SOMENTE JSON: {"resumo_geral": str, "setores": '
          '[{"nome": str, "urgencia": "baixa|media|alta", "diagnostico": str, "acoes": [str]}], '
-         '"insights": [str]}. "insights" = relacoes entre CO2, solo e temperatura ou riscos que as regras nao pegam.'},
-        {"role": "user", "content": "ANALISE:\n" + resumo + "\n\nPAINEL DO PROGRAMA EM C (CO2):\n" + painel}], json_mode=True)
+         '"insights": [str]}. "insights" = relacoes entre temperatura, umidade do ar e pressao ou riscos que as regras nao pegam.'},
+        {"role": "user", "content": "ANALISE:\n" + resumo}], json_mode=True)
     if erro: return None, erro
     try: return json.loads(txt), None
     except ValueError: return None, "IA devolveu JSON invalido"
@@ -92,13 +92,13 @@ def chat(pergunta, resumo, historico=""):
                     + ("\n\nHISTORICO DOS ULTIMOS TESTES:\n" + historico if historico else "")},
                    {"role": "user", "content": pergunta}])
 
-def processar(rows, painel=""):
+def processar(rows):
     n = len(rows) // len(NOMES)
     if n < 3: raise ValueError(f"Poucas leituras ({len(rows)}); preciso de ao menos {3 * len(NOMES)}.")
     setores = [setor(nome, rows[i * n:(i + 1) * n]) for i, nome in enumerate(NOMES)]
     resumo = resumo_texto(setores)
-    ia, erro = laudo(resumo, painel)
-    return {"setores": setores, "canais": CANAIS, "painel": painel, "resumo": resumo,
+    ia, erro = laudo(resumo)
+    return {"setores": setores, "canais": CANAIS, "resumo": resumo,
             "laudo": ia, "erro_laudo": erro, "intervalo_s": INTERVALO_S}
 
 def slope(ys):
@@ -113,12 +113,14 @@ def historico_local(hist):
     ss = [e["resultado"]["setores"] for e in hist]
     canais, insights = {}, []
     for k, c in CANAIS.items():
-        medias = [sum(x["canais"][k]["media"] for x in s) / len(s) for s in ss]
-        alem = sum(c["sentido"] * (m - c["limite"]) >= 0 for m in medias)
-        susp = sum(any(x["canais"][k]["suspeito"] for x in s) for s in ss)
+        ss_k = [s for s in ss if k in s[0]["canais"]]  # testes antigos nao tem os canais novos
+        if not ss_k: continue
+        medias = [sum(x["canais"][k]["media"] for x in s) / len(s) for s in ss_k]
+        alem = 0 if c["limite"] is None else sum(c["sentido"] * (m - c["limite"]) >= 0 for m in medias)
+        susp = sum(any(x["canais"][k]["suspeito"] for x in s) for s in ss_k)
         t = slope(medias)
         canais[k] = {"medias": medias, "tendencia": t, "suspeito_em": susp}
-        if n > 1 and abs(t) * (n - 1) > 0.05 * abs(c["limite"]):
+        if n > 1 and abs(t) * (n - 1) > 0.05 * abs(c["limite"] or 1000):
             insights.append(f"{c['rot']}: media {'subindo' if t > 0 else 'caindo'} {abs(t):.1f} {c['un']} por teste "
                             f"(de {medias[0]:.1f} para {medias[-1]:.1f}).")
         if alem: insights.append(f"{c['rot']}: media alem do limite em {alem} de {n} testes.")
@@ -133,8 +135,8 @@ def resumo_historico(hist):
     linhas = []
     for i, e in enumerate(hist, 1):
         s = e["resultado"]["setores"][0]
-        med = ", ".join(f"{CANAIS[k]['rot']} {c['media']:.1f} {CANAIS[k]['un']}" for k, c in s["canais"].items())
-        susp = [CANAIS[k]["rot"] for k, c in s["canais"].items() if c["suspeito"]]
+        med = ", ".join(f"{CANAIS[k]['rot']} {c['media']:.1f} {CANAIS[k]['un']}" for k, c in s["canais"].items() if k in CANAIS)
+        susp = [CANAIS[k]["rot"] for k, c in s["canais"].items() if k in CANAIS and c["suspeito"]]
         linhas.append(f"#{i} {e['ts']} ({e['fonte']}): risco {s['risco']}/100; {med}; sensores suspeitos: {', '.join(susp) or 'nenhum'}")
     return "\n".join(linhas) + "\nPadroes calculados: " + (" ".join(h["insights"]) or "nenhum")
 
@@ -154,7 +156,7 @@ def parse(texto):
     for l in texto.splitlines():
         p = l.strip().split(",")
         try:
-            if len(p) == 3: rows.append(tuple(float(x) for x in p))
+            if len(p) == len(CANAIS): rows.append(tuple(float(x) for x in p))
         except ValueError:
             pass
     return rows

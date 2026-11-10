@@ -1,24 +1,23 @@
 # Agrosense
 
-Monitoramento de CO₂, umidade do solo e temperatura de uma estufa, com painel web, regras de risco e laudo gerado pela OpenAI.
+Monitoramento de temperatura, umidade do ar e pressão de uma estufa, com um sensor BME280 num Arduino Uno, com painel web, regras de risco e laudo gerado pela OpenAI.
 
 ## Como funciona
 
 ```
-Arduino (MH-Z19B + sensor de solo) --serial--> server.py --> ecotech_sensor (C) --> painel de CO₂
-                                                   |
+Arduino Uno (BME280) --serial--> server.py
+                                    |
                                                    +--> analisar_ia.py --> regras, tendência, previsão
                                                    |                   \--> openai_client.py --> laudo
                                                    +--> dados/historico.json (últimos 10 testes)
                                                    +--> index.html (interface)
 ```
 
-Cada teste coleta 24 leituras (uma a cada 2 s) da porta serial, ou gera leituras simuladas no modo demonstração. O programa em C monta o painel de CO₂, e o Python calcula tendência, previsão de cruzamento do limite, sensores suspeitos, correlações e risco de 0 a 100. A OpenAI devolve o laudo e responde perguntas no chat.
+Cada teste coleta 24 leituras (uma a cada 2 s) da porta serial, ou gera leituras simuladas no modo demonstração. O Python calcula tendência, previsão de cruzamento do limite, sensores suspeitos, correlações e risco de 0 a 100. A OpenAI devolve o laudo e responde perguntas no chat.
 
 ## Requisitos
 
 - Python 3.10+
-- gcc
 - Chave da OpenAI
 
 ## Configuração
@@ -57,10 +56,9 @@ Firmware em `arduino/ecotech_multi/ecotech_multi.ino`.
 
 | Componente | Pino |
 |---|---|
-| MH-Z19B RX / TX | 10 / 11 |
-| Sensor capacitivo de solo | A0 |
+| BME280 (I2C) VIN / GND / SDA / SCL | 5V / GND / A4 / A5 |
 
-Calibre `SOLO_SECO`, `SOLO_MOLHADO` e `TEMP_OFFSET` no início do firmware. A temperatura vem do próprio MH-Z19B e pode errar alguns graus.
+Calibre `TEMP_OFFSET` no início do firmware. O BME280 mede temperatura, umidade do ar e pressão (endereço `0x76` ou `0x77`; precisa da biblioteca *Adafruit BME280*). Se o módulo for na verdade um BMP280, não há umidade e o firmware não envia leituras. Cada linha serial é `temp,umidade_ar,pressao`.
 
 ## API
 
@@ -77,9 +75,9 @@ Calibre `SOLO_SECO`, `SOLO_MOLHADO` e `TEMP_OFFSET` no início do firmware. A te
 
 | Canal | Alerta |
 |---|---|
-| CO₂ | média ≥ 1000 ppm (crítica ≥ 1300) |
-| Solo | < 30 % (seco), < 20 % (muito seco) |
 | Temperatura | > 32 °C |
+| Umidade do ar | > 85 % |
+| Pressão | sem alerta, só informativa |
 
 ## Testes
 
@@ -87,7 +85,7 @@ Calibre `SOLO_SECO`, `SOLO_MOLHADO` e `TEMP_OFFSET` no início do firmware. A te
 pytest
 ```
 
-Os testes sobem o servidor de verdade e usam um servidor HTTP local no lugar da OpenAI. Nenhuma chamada sai para a internet, e o gcc é necessário.
+Os testes sobem o servidor de verdade e usam um servidor HTTP local no lugar da OpenAI. Nenhuma chamada sai para a internet.
 
 ## Arquivos
 
@@ -96,7 +94,6 @@ Os testes sobem o servidor de verdade e usam um servidor HTTP local no lugar da 
 | `server.py` | Servidor HTTP, coleta serial, demo e histórico |
 | `analisar_ia.py` | Análise estatística, regras e prompts |
 | `openai_client.py` | Cliente da OpenAI e leitura do `.env` |
-| `ecotech_co2_sensor.c` | Painel de CO₂ lido do Arduino |
 | `ecotech_co2.c` | Versão da atividade, com leituras simuladas |
 | `index.html` | Interface |
 | `test_projeto.py` | Testes |
