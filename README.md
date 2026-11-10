@@ -6,11 +6,10 @@ Monitoramento de temperatura, umidade do ar e pressão de uma estufa, com um sen
 
 ```
 Arduino Uno (BME280) --serial--> server.py
-                                    |
-                                                   +--> analisar_ia.py --> regras, tendência, previsão
-                                                   |                   \--> openai_client.py --> laudo
-                                                   +--> dados/historico.json (últimos 10 testes)
-                                                   +--> index.html (interface)
+                                    +--> analisar_ia.py --> regras, tendência, previsão
+                                    |                   \--> openai_client.py --> laudo
+                                    +--> dados/historico.json (últimos 10 testes)
+                                    +--> index.html (interface)
 ```
 
 Cada teste coleta 24 leituras (uma a cada 2 s) da porta serial, ou gera leituras simuladas no modo demonstração. O Python calcula tendência, previsão de cruzamento do limite, sensores suspeitos, correlações e risco de 0 a 100. A OpenAI devolve o laudo e responde perguntas no chat.
@@ -97,6 +96,5 @@ Os testes sobem o servidor de verdade e usam um servidor HTTP local no lugar da 
 | `server.py` | Servidor HTTP, coleta serial, demo e histórico |
 | `analisar_ia.py` | Análise estatística, regras e prompts |
 | `openai_client.py` | Cliente da OpenAI e leitura do `.env` |
-| `ecotech_co2.c` | Versão da atividade, com leituras simuladas |
 | `index.html` | Interface |
 | `test_projeto.py` | Testes |

@@ -1,6 +1,6 @@
 .env
 .git
 arduino
-ecotech_sensor
-ecotech_co2
 dados
+__pycache__
+.pytest_cache
