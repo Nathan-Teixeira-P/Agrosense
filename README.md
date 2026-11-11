@@ -1,4 +1,4 @@
-# Agrosense
+# Carinho na Roça
 
 Monitoramento de temperatura, umidade do ar e pressão de uma estufa, com um sensor BME280 num Arduino Uno, com painel web, regras de risco e laudo gerado pela OpenAI.
 

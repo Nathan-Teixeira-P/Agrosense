@@ -4,7 +4,7 @@ from openai_client import openai
 
 INTERVALO_S = 2
 TRAVADO = 12
-NOMES = ["Agrosense"]
+NOMES = ["Carinho na Roça"]
 CANAIS = {
     "temp": dict(rot="Temperatura", un="°C", limite=32, sentido=1, salto=5, faixa=(-10, 60), travado=0),
     "umi":  dict(rot="Umidade do ar", un="%", limite=85, sentido=1, salto=20, faixa=(0, 100), travado=0),
