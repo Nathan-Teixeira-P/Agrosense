@@ -246,7 +246,7 @@ function render(r) {
         ${cor ? `<h2 style="margin-top:14px">O que anda junto</h2><div class="chips">${cor}</div>` : ""}
       </section>
       <section class="card nota"><h2>Recado pro tio</h2>
-        ${(ai?.acoes || []).map(x => `<div class="act"><span class="dot" aria-hidden="true"></span><span>${esc(x)}</span></div>`).join("") || `<p class="note">Não consegui gerar sugestões agora.</p>`}
+        ${(ai?.acoes || []).map(x => `<div class="act"><span class="dot" aria-hidden="true"></span><span>${esc(x)}</span></div>`).join("") || (ai ? `<div class="act"><span class="dot ok" aria-hidden="true"></span><span>Sem ações extras: está tudo dentro do esperado.</span></div>` : `<p class="note">Não consegui gerar sugestões agora.</p>`)}
       </section>
     </div>`;
   }).join("");

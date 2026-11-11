@@ -6,8 +6,8 @@ INTERVALO_S = 2
 TRAVADO = 12  # leituras identicas seguidas (24 s) para suspeitar de sensor travado
 NOMES = ["Agrosense"]
 CANAIS = {
-    "temp": dict(rot="Temperatura", un="°C", limite=32, sentido=1, salto=5, faixa=(-10, 60), travado=0),  # travado=0: sensor digital estavel repete 0,1 °C por minutos
-    "umi":  dict(rot="Umidade do ar", un="%", limite=85, sentido=1, salto=20, faixa=(0, 100)),
+    "temp": dict(rot="Temperatura", un="°C", limite=32, sentido=1, salto=5, faixa=(-10, 60), travado=0),  # travado=0: BME280 estavel repete o mesmo valor (0,1 de resolucao) por minutos
+    "umi":  dict(rot="Umidade do ar", un="%", limite=85, sentido=1, salto=20, faixa=(0, 100), travado=0),
     "pres": dict(rot="Pressao", un="hPa", limite=None, sentido=1, salto=10, faixa=(300, 1100), ref=100, travado=0),  # so informativa; ref = escala p/ detectar tendencia no historico
 }
 
