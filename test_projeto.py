@@ -34,9 +34,10 @@ def test_sensor_travado_e_salto_sao_suspeitos():
     assert any("fora da faixa" in s for s in fora["suspeito"])
 
 def test_sensor_travado_e_suspeito_mas_pouca_repeticao_nao():
-    for k, v in {"temp": 25.0, "umi": 60.0, "pres": 1013.0}.items():
-        assert any("identicas" in s for s in ia.canal([v] * 24, ia.CANAIS[k])["suspeito"])
-        assert ia.canal([v] * 6 + [v + 0.1 * i for i in range(18)], ia.CANAIS[k])["suspeito"] == []
+    assert any("identicas" in s for s in ia.canal([60.0] * 24, ia.CANAIS["umi"])["suspeito"])
+    assert ia.canal([60.0] * 6 + [60.0 + 0.1 * i for i in range(18)], ia.CANAIS["umi"])["suspeito"] == []
+    for k, v in {"temp": 25.0, "pres": 1013.0}.items():  # estavel nao e travado
+        assert ia.canal([v] * 24, ia.CANAIS[k])["suspeito"] == []
 
 def test_limite_exato_conta_como_alerta():
     s = ia.setor("A", rows(lambda i: 31.5 + i % 2, lambda i: 60 + i % 2, lambda i: 1013 + i % 2))
