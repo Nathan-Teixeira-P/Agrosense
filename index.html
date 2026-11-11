@@ -129,6 +129,8 @@ header select option{color:#2b2418}
 .nota{background:var(--note);border-color:#b99a2f;box-shadow:3px 4px 0 rgba(0,0,0,.18);transform:rotate(1deg);margin-top:8px}
 .nota>h2{color:#6a4b08}.nota .act{border-top-color:rgba(106,75,8,.25)}.nota .dot{background:#6a4b08}
 .nota .act span:last-child{font:600 21px/1.25 var(--hand);color:#3b2d05}
+.nota .note{color:#3b2d05}
+@media(prefers-color-scheme:dark){.nota>h2{color:#f6d77a}.nota .act{border-top-color:rgba(251,233,160,.25)}.nota .dot{background:#f6d77a}.nota .act span:last-child,.nota .note{color:#fbefc4}}
 .lead{font-size:21px;font-weight:600}
 .act{font-size:15.5px}
 .hist-h{font:600 34px var(--hand);color:var(--clay);display:inline-block;background:linear-gradient(transparent 82%,var(--sun) 82% 92%,transparent 92%);padding:0 6px}
@@ -245,7 +247,7 @@ function render(r) {
         ${s.regras.map(x => `<div class="act"><span class="dot" aria-hidden="true"></span><span>${esc(x)}</span></div>`).join("") || `<div class="act"><span class="dot ok" aria-hidden="true"></span><span>Nada a fazer por enquanto.</span></div>`}
         ${cor ? `<h2 style="margin-top:14px">O que anda junto</h2><div class="chips">${cor}</div>` : ""}
       </section>
-      <section class="card nota"><h2>Recado pro tio</h2>
+      <section class="card nota"><h2>Sugestões pra estufa</h2>
         ${(ai?.acoes || []).map(x => `<div class="act"><span class="dot" aria-hidden="true"></span><span>${esc(x)}</span></div>`).join("") || (ai ? `<div class="act"><span class="dot ok" aria-hidden="true"></span><span>Sem ações extras: está tudo dentro do esperado.</span></div>` : `<p class="note">Não consegui gerar sugestões agora.</p>`)}
       </section>
     </div>`;
