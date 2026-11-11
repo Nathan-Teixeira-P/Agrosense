@@ -20,7 +20,7 @@ def carregar():
 
 def salvar(fonte, r):
     with trava:
-        h = ia.atuais(carregar())  # descarta testes do formato antigo (CO2/solo)
+        h = ia.atuais(carregar())
         h.append({"id": int(datetime.datetime.now().timestamp() * 1000), "fonte": fonte, "resultado": r,
                   "ts": datetime.datetime.now().strftime("%d/%m %H:%M:%S")})
         os.makedirs(DADOS, exist_ok=True)
@@ -29,7 +29,6 @@ def salvar(fonte, r):
         os.replace(tmp, ARQ)
 
 def lidas(texto):
-    # a 1a linha pode chegar cortada (porta aberta no meio de uma linha): descartada
     return ia.parse(texto.split("\n", 1)[1] if "\n" in texto else "")
 
 def serie(tipo, base, passo, ruido, lo, hi):

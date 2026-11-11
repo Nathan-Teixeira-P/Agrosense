@@ -37,7 +37,7 @@ def test_sensor_travado_so_vale_quando_habilitado_e_bme280_estavel_nao_alerta():
     c = {**ia.CANAIS["umi"], "travado": 12}
     assert any("identicas" in s for s in ia.canal([60.0] * 24, c)["suspeito"])
     assert ia.canal([60.0] * 6 + [60.0 + 0.1 * i for i in range(18)], c)["suspeito"] == []
-    for k, v in {"temp": 25.0, "umi": 60.0, "pres": 1013.0}.items():  # estavel nao e travado
+    for k, v in {"temp": 25.0, "umi": 60.0, "pres": 1013.0}.items():
         assert ia.canal([v] * 24, ia.CANAIS[k])["suspeito"] == []
 
 def test_limite_exato_conta_como_alerta():

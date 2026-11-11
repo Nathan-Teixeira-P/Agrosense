@@ -3,12 +3,12 @@ import json, math, statistics, sys
 from openai_client import openai
 
 INTERVALO_S = 2
-TRAVADO = 12  # leituras identicas seguidas (24 s) para suspeitar de sensor travado
+TRAVADO = 12
 NOMES = ["Agrosense"]
 CANAIS = {
-    "temp": dict(rot="Temperatura", un="°C", limite=32, sentido=1, salto=5, faixa=(-10, 60), travado=0),  # travado=0: BME280 estavel repete o mesmo valor (0,1 de resolucao) por minutos
+    "temp": dict(rot="Temperatura", un="°C", limite=32, sentido=1, salto=5, faixa=(-10, 60), travado=0),
     "umi":  dict(rot="Umidade do ar", un="%", limite=85, sentido=1, salto=20, faixa=(0, 100), travado=0),
-    "pres": dict(rot="Pressao", un="hPa", limite=None, sentido=1, salto=10, faixa=(300, 1100), ref=100, travado=0),  # so informativa; ref = escala p/ detectar tendencia no historico
+    "pres": dict(rot="Pressao", un="hPa", limite=None, sentido=1, salto=10, faixa=(300, 1100), ref=100, travado=0),
 }
 
 def canal(v, c):
@@ -109,9 +109,10 @@ def slope(ys):
     mx, my = (n - 1) / 2, sum(ys) / n
     return sum((i - mx) * (y - my) for i, y in enumerate(ys)) / sum((i - mx) ** 2 for i in range(n))
 
+
 def atuais(hist):
-    """Testes gravados antes do BME280 (com CO2/solo) misturariam sensores diferentes: ficam de fora."""
     return [e for e in hist if all(k in e["resultado"]["setores"][0]["canais"] for k in CANAIS)]
+
 
 def historico_local(hist):
     hist = atuais(hist)

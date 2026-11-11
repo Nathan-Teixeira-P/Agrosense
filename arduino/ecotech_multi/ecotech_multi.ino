@@ -1,11 +1,11 @@
 #include <Wire.h>
-#include <Adafruit_BME280.h>  // instalar: Adafruit BME280 Library (Adafruit Unified Sensor junto)
+#include <Adafruit_BME280.h>
 
 #define INTERVALO_MS 2000
 
-const float TEMP_OFFSET = 0;  // calibre se o termometro de referencia discordar
+const float TEMP_OFFSET = 0;
 
-Adafruit_BME280 bme;  // I2C no Uno: SDA=A4, SCL=A5, VIN=5V, GND=GND
+Adafruit_BME280 bme;
 
 void setup() {
   Serial.begin(9600);
@@ -16,8 +16,7 @@ void setup() {
 void loop() {
   float temp = bme.readTemperature() + TEMP_OFFSET;
   float umi = bme.readHumidity();
-  float pres = bme.readPressure() / 100.0;  // Pa -> hPa
-  // BMP280 vendido como BME280 nao tem umidade (NaN): nao envia a linha
+  float pres = bme.readPressure() / 100.0;
   if (!isnan(temp) && !isnan(umi) && !isnan(pres)) {
     Serial.print(temp, 1); Serial.print(',');
     Serial.print(umi, 1); Serial.print(',');
