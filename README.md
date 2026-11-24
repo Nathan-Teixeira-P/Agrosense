@@ -1,4 +1,6 @@
-# Carinho na Roça
+# Agrosense
+
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white) ![Arduino](https://img.shields.io/badge/Arduino-BME280-00979D?logo=arduino&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-pronto-2496ED?logo=docker&logoColor=white) ![OpenAI](https://img.shields.io/badge/IA-OpenAI-412991?logo=openai&logoColor=white)
 
 Monitoramento de temperatura, umidade do ar e pressão de uma estufa, com um sensor BME280 num Arduino Uno, com painel web, regras de risco e laudo gerado pela OpenAI.
 
